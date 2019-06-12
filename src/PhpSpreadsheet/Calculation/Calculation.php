@@ -528,7 +528,7 @@ class Calculation
         'COUNTIFS' => [
             'category' => Category::CATEGORY_STATISTICAL,
             'functionCall' => [Functions::class, 'DUMMY'],
-            'argumentCount' => '2',
+            'argumentCount' => '2+',
         ],
         'COUPDAYBS' => [
             'category' => Category::CATEGORY_FINANCIAL,
@@ -649,6 +649,11 @@ class Calculation
             'category' => Category::CATEGORY_DATE_AND_TIME,
             'functionCall' => [DateTime::class, 'DAYOFMONTH'],
             'argumentCount' => '1',
+        ],
+        'DAYS' => [
+            'category' => Category::CATEGORY_DATE_AND_TIME,
+            'functionCall' => [DateTime::class, 'DAYS'],
+            'argumentCount' => '2',
         ],
         'DAYS360' => [
             'category' => Category::CATEGORY_DATE_AND_TIME,
@@ -2202,8 +2207,8 @@ class Calculation
     private static function loadLocales()
     {
         $localeFileDirectory = __DIR__ . '/locale/';
-        foreach (glob($localeFileDirectory . '/*', GLOB_ONLYDIR) as $filename) {
-            $filename = substr($filename, strlen($localeFileDirectory) + 1);
+        foreach (glob($localeFileDirectory . '*', GLOB_ONLYDIR) as $filename) {
+            $filename = substr($filename, strlen($localeFileDirectory));
             if ($filename != 'en') {
                 self::$validLocaleLanguages[] = $filename;
             }
@@ -2408,7 +2413,6 @@ class Calculation
         if (strpos($locale, '_') !== false) {
             list($language) = explode('_', $locale);
         }
-
         if (count(self::$validLocaleLanguages) == 1) {
             self::loadLocales();
         }
@@ -2699,7 +2703,7 @@ class Calculation
      * @param Cell $pCell Cell to calculate
      * @param bool $resetLog Flag indicating whether the debug log should be reset or not
      *
-     * @throws Exception
+     * @throws \PhpOffice\PhpSpreadsheet\Exception
      *
      * @return mixed
      */
@@ -2777,7 +2781,7 @@ class Calculation
      *
      * @param string $formula Formula to parse
      *
-     * @return array
+     * @return array|bool
      */
     public function parseFormula($formula)
     {
@@ -2803,7 +2807,7 @@ class Calculation
      * @param string $cellID Address of the cell to calculate
      * @param Cell $pCell Cell to calculate
      *
-     * @throws Exception
+     * @throws \PhpOffice\PhpSpreadsheet\Exception
      *
      * @return mixed
      */
@@ -2886,6 +2890,15 @@ class Calculation
     public function _calculateFormulaValue($formula, $cellID = null, Cell $pCell = null)
     {
         $cellValue = null;
+
+        //  Quote-Prefixed cell values cannot be formulae, but are treated as strings
+        if ($pCell !== null && $pCell->getStyle()->getQuotePrefix() === true) {
+            return self::wrapResult((string) $formula);
+        }
+
+        if (preg_match('/^=\s*cmd\s*\|/miu', $formula) !== 0) {
+            return self::wrapResult($formula);
+        }
 
         //    Basic validation that this is indeed a formula
         //    We simply return the cell value if not
@@ -3937,9 +3950,7 @@ class Calculation
                     }
 
                     //    Process the argument with the appropriate function call
-                    if ($passCellReference) {
-                        $args[] = $pCell;
-                    }
+                    $args = $this->addCellReference($args, $passCellReference, $functionCall, $pCell);
 
                     if (!is_array($functionCall)) {
                         foreach ($args as &$arg) {
@@ -4275,6 +4286,8 @@ class Calculation
             throw new Exception($errorMessage);
         }
         trigger_error($errorMessage, E_USER_ERROR);
+
+        return false;
     }
 
     /**
@@ -4302,6 +4315,8 @@ class Calculation
             $aReferences = Coordinate::extractAllCellReferencesInRange($pRange);
             $pRange = $pSheetName . '!' . $pRange;
             if (!isset($aReferences[1])) {
+                $currentCol = '';
+                $currentRow = 0;
                 //    Single cell in range
                 sscanf($aReferences[0], '%[A-Z]%d', $currentCol, $currentRow);
                 if ($pSheet->cellExists($aReferences[0])) {
@@ -4312,6 +4327,8 @@ class Calculation
             } else {
                 // Extract cell data for all cells in the range
                 foreach ($aReferences as $reference) {
+                    $currentCol = '';
+                    $currentRow = 0;
                     // Extract range
                     sscanf($reference, '%[A-Z]%d', $currentCol, $currentRow);
                     if ($pSheet->cellExists($reference)) {
@@ -4430,5 +4447,35 @@ class Calculation
         }
 
         return $returnValue;
+    }
+
+    /**
+     * Add cell reference if needed while making sure that it is the last argument.
+     *
+     * @param array $args
+     * @param bool $passCellReference
+     * @param array|string $functionCall
+     * @param null|Cell $pCell
+     *
+     * @return array
+     */
+    private function addCellReference(array $args, $passCellReference, $functionCall, Cell $pCell = null)
+    {
+        if ($passCellReference) {
+            if (is_array($functionCall)) {
+                $className = $functionCall[0];
+                $methodName = $functionCall[1];
+
+                $reflectionMethod = new \ReflectionMethod($className, $methodName);
+                $argumentCount = count($reflectionMethod->getParameters());
+                while (count($args) < $argumentCount - 1) {
+                    $args[] = null;
+                }
+            }
+
+            $args[] = $pCell;
+        }
+
+        return $args;
     }
 }

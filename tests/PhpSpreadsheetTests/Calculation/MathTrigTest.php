@@ -281,10 +281,8 @@ class MathTrigTest extends TestCase
      */
     public function testMINVERSE($expectedResult, ...$args)
     {
-        $this->markTestIncomplete('TODO: This test should be fixed');
-
         $result = MathTrig::MINVERSE(...$args);
-        self::assertEquals($expectedResult, $result, null, 1E-12);
+        self::assertEquals($expectedResult, $result, null, 1E-8);
     }
 
     public function providerMINVERSE()
@@ -299,10 +297,8 @@ class MathTrigTest extends TestCase
      */
     public function testMMULT($expectedResult, ...$args)
     {
-        $this->markTestIncomplete('TODO: This test should be fixed');
-
         $result = MathTrig::MMULT(...$args);
-        self::assertEquals($expectedResult, $result, null, 1E-12);
+        self::assertEquals($expectedResult, $result, null, 1E-8);
     }
 
     public function providerMMULT()
@@ -566,6 +562,22 @@ class MathTrigTest extends TestCase
     public function providerSUMIF()
     {
         return require 'data/Calculation/MathTrig/SUMIF.php';
+    }
+
+    /**
+     * @dataProvider providerSUMIFS
+     *
+     * @param mixed $expectedResult
+     */
+    public function testSUMIFS($expectedResult, ...$args)
+    {
+        $result = MathTrig::SUMIFS(...$args);
+        self::assertEquals($expectedResult, $result, '', 1E-12);
+    }
+
+    public function providerSUMIFS()
+    {
+        return require 'data/Calculation/MathTrig/SUMIFS.php';
     }
 
     /**
